@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node server.js",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint"
   },
   "dependencies": {
     "@react-spring/web": "^10.0.1",
@@ -19,11 +19,11 @@
     "mongodb": "^6.18.0",
     "next": "15.5.0",
     "nodemailer": "^7.0.5",
+    "pusher": "^5.2.0",
+    "pusher-js": "^8.4.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-tinder-card": "^1.6.4",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "react-tinder-card": "^1.6.4"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
