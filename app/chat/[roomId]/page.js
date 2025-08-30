@@ -1,4 +1,3 @@
-// app/chat/[roomId]/page.js
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -15,6 +14,7 @@ export default function ChatRoom() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [sendError, setSendError] = useState(''); // 메시지 전송 오류 상태 추가
 
   const params = useParams();
   const searchParams = useSearchParams();
@@ -53,12 +53,16 @@ export default function ChatRoom() {
     if (roomId) {
       fetchUserAndHistory();
     }
-  }, [roomId]);
+  }, [roomId, router]);
 
   useEffect(() => {
-    if (!roomId || !process.env.NEXT_PUBLIC_PUSHER_KEY) return;
+    if (!roomId || !process.env.NEXT_PUBLIC_PUSHER_KEY) {
+      console.error("Pusher key is not defined.");
+      return;
+    };
 
-    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSher_KEY, {
+    // 💥 수정: 'PUSher_KEY'의 오타를 'PUSHER_KEY'로 바로잡았습니다.
+    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
 
@@ -86,9 +90,10 @@ export default function ChatRoom() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (currentMessage.trim() === '' || !currentUser) return;
+    setSendError(''); // 이전 에러 메시지 초기화
 
     try {
-      await fetch('/api/chat/message', {
+      const response = await fetch('/api/chat/message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -97,9 +102,15 @@ export default function ChatRoom() {
           authorName: currentUser.name,
         }),
       });
+
+      // 💥 추가: 전송 실패 시 사용자에게 알림
+      if (!response.ok) {
+        throw new Error("메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      }
       setCurrentMessage('');
     } catch (error) {
       console.error("Failed to send message", error);
+      setSendError(error.message); // 에러 메시지 상태 업데이트
     }
   };
 
@@ -172,8 +183,9 @@ export default function ChatRoom() {
           )}
           <div ref={messagesEndRef} />
         </main>
-
+        
         <footer className="bg-white p-4 border-t">
+          {sendError && <p className="text-xs text-red-500 text-center mb-2">{sendError}</p>}
           <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
             <input
               type="text"
@@ -191,7 +203,7 @@ export default function ChatRoom() {
 
       {isReportModalOpen && <ReportModal onClose={() => setIsReportModalOpen(false)} onReport={handleReportSubmit} />}
       {reportMessage && <div className="fixed top-5 right-5 bg-green-500 text-white py-2 px-4 rounded-lg shadow-lg">{reportMessage}</div>}
-
+      
       {showLeaveConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl text-center">
