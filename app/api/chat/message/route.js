@@ -1,115 +1,57 @@
-// app/chat/[roomId]/page.js
-'use client';
+import { NextResponse } from 'next/server';
+import { pusherServer } from '@/lib/pusher';
+import { getUserFromToken } from '@/lib/auth';
+import { ObjectId } from 'mongodb';
 
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import Pusher from 'pusher-js';
-import ReportModal from '@/components/ReportModal';
+async function getDb() {
+  const { default: clientPromise } = await import('@/lib/mongodb');
+  const client = await clientPromise;
+  return client.db('datingApp');
+}
 
-export default function ChatRoom() {
-  const [messages, setMessages] = useState([]);
-  const [currentMessage, setCurrentMessage] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [reportMessage, setReportMessage] = useState('');
-  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-
-  const params = useParams();
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const { roomId } = params;
-  const partnerName = searchParams.get('partnerName');
-  const partnerImageUrl = searchParams.get('partnerImageUrl');
-  const partnerId = roomId.split('_').find(id => currentUser && id !== currentUser._id);
-
-  const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    const fetchUserAndHistory = async () => {
-      try {
-        // 1. 현재 사용자 정보 가져오기
-        const userRes = await fetch('/api/profile');
-        const userData = await userRes.json();
-        setCurrentUser(userData);
-
-        // 2. 이전 대화 기록 가져오기
-        const historyRes = await fetch(`/api/chat/${roomId}`);
-        const historyData = await historyRes.json();
-        setMessages(historyData);
-      } catch (error) {
-        console.error("Failed to fetch initial data", error);
-      } finally {
-        setIsLoadingHistory(false);
-      }
-    };
-    fetchUserAndHistory();
-  }, [roomId]);
-
-  // Pusher 실시간 연결 설정
-  useEffect(() => {
-    if (!roomId) return;
-
-    // .env.local에 NEXT_PUBLIC_PUSHER_KEY가 필요합니다.
-    const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
-      cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
-    });
-
-    const channel = pusher.subscribe(`chat-${roomId}`);
-
-    channel.bind('new-message', (newMessage) => {
-      setMessages((prevMessages) => {
-        if (!prevMessages.find(msg => msg._id === newMessage._id)) {
-          return [...prevMessages, newMessage];
-        }
-        return prevMessages;
-      });
-    });
-
-    // 컴포넌트가 사라질 때 연결을 해제합니다.
-    return () => {
-      channel.unbind_all();
-      channel.unsubscribe();
-    };
-  }, [roomId]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (currentMessage.trim() === '' || !currentUser) return;
-
-    try {
-      await fetch('/api/chat/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: currentMessage,
-          roomId: roomId,
-          authorName: currentUser.name,
-        }),
-      });
-      setCurrentMessage('');
-    } catch (error) {
-      console.error("Failed to send message", error);
+export async function POST(request) {
+  console.log("--- [Message API] 메시지 전송 요청 수신 ---");
+  try {
+    const currentUserPayload = await getUserFromToken();
+    if (!currentUserPayload) {
+      console.error("[Message API] 인증 실패: 사용자가 로그인하지 않았습니다.");
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
-  };
+    console.log("[Message API] 인증 성공. 사용자 ID:", currentUserPayload.userId);
 
-  // ... (handleReportSubmit, handleLeaveChat 함수들은 기존과 동일하게 유지)
+    const { text, roomId, authorName } = await request.json();
+    console.log("[Message API] 요청 데이터 파싱 성공:", { text, roomId, authorName });
 
-  const fallbackChar = partnerName?.charAt(0) || '?';
+    if (!text || !roomId || !authorName) {
+      console.error("[Message API] 유효성 검사 실패: 요청 데이터에 누락된 정보가 있습니다.");
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
 
-  return (
-    <>
-      {/* ... (기존 채팅방 JSX 코드는 여기에 그대로 유지됩니다) */}
-    </>
-  );
+    const db = await getDb();
+    console.log("[Message API] 데이터베이스 연결 성공.");
+
+    const savedMessage = {
+      text,
+      roomId,
+      authorId: new ObjectId(currentUserPayload.userId),
+      authorName,
+      timestamp: new Date(),
+    };
+
+    const result = await db.collection('messages').insertOne(savedMessage);
+    console.log("[Message API] 메시지가 데이터베이스에 저장되었습니다. Inserted ID:", result.insertedId);
+
+    const messageToSend = { ...savedMessage, _id: result.insertedId };
+
+    console.log("[Message API] Pusher 이벤트를 전송합니다...");
+    // Pusher.trigger는 인증 정보가 틀리면 여기서 오류를 발생시킬 수 있습니다.
+    await pusherServer.trigger(`chat-${roomId}`, 'new-message', messageToSend);
+    console.log("[Message API] Pusher 이벤트 전송 성공.");
+
+    return NextResponse.json({ success: true, message: messageToSend });
+  } catch (error) {
+    // try 블록 안에서 발생하는 모든 오류(Pusher 오류 포함)는 여기서 잡힙니다.
+    console.error("[Message API] 처리 중 오류 발생:", error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
 }
