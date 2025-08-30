@@ -113,9 +113,11 @@ export async function POST(request) {
     // 5. 인증 이메일을 발송합니다.
     const { sendVerificationEmail } = await import('@/lib/email');
     
-    // --- 인증 URL 생성 로직 수정 ---
-    // Vercel 환경에서는 VERCEL_URL을 사용하고, 그렇지 않으면 BASE_URL을 사용합니다.
-    const baseUrl = process.env.BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // --- 최종 인증 URL 생성 로직 ---
+    // 요청 헤더에서 직접 호스트를 가져와서 URL을 만듭니다. 이 방식이 가장 안정적입니다.
+    const host = request.headers.get('host');
+    const protocol = host.startsWith('localhost') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${host}`;
     const verificationUrl = `${baseUrl}/api/verify?token=${verificationToken}`;
     // --- 수정 끝 ---
 
