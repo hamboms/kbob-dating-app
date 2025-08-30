@@ -68,7 +68,6 @@ export async function GET(request) {
 // POST 함수 (회원가입 로직)
 export async function POST(request) {
   try {
-    console.log("\n--- 회원가입 API 시작 ---");
     const db = await getDb();
     const { name, email, password, age, gender, bio } = await request.json();
 
@@ -92,9 +91,6 @@ export async function POST(request) {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const tokenExpires = new Date(new Date().getTime() + 3600000); // 1시간 후 만료
 
-    // --- 디버깅 로그 1: 생성된 토큰 확인 ---
-    console.log("1. 생성된 인증 토큰:", verificationToken);
-
     const newUser = {
       name,
       email,
@@ -111,26 +107,19 @@ export async function POST(request) {
       isAdmin: false
     };
 
-    // --- 디버깅 로그 2: DB에 저장될 사용자 객체 확인 ---
-    console.log("2. 데이터베이스에 저장될 사용자 정보:", JSON.stringify(newUser, null, 2));
-
-
     // 4. 새로운 사용자를 데이터베이스에 저장합니다.
     await db.collection('users').insertOne(newUser);
-    console.log("사용자 정보 DB 저장 완료.");
 
     // 5. 인증 이메일을 발송합니다.
     const { sendVerificationEmail } = await import('@/lib/email');
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-    const verificationUrl = `${baseUrl}/api/verify?token=${verificationToken}`;
     
-    // --- 디버깅 로그 3: 이메일로 발송될 인증 URL 확인 ---
-    console.log("3. 이메일로 발송될 URL:", verificationUrl);
+    // --- 인증 URL 생성 로직 수정 ---
+    // Vercel 환경에서는 VERCEL_URL을 사용하고, 그렇지 않으면 BASE_URL을 사용합니다.
+    const baseUrl = process.env.BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const verificationUrl = `${baseUrl}/api/verify?token=${verificationToken}`;
+    // --- 수정 끝 ---
 
     await sendVerificationEmail(email, name, verificationUrl);
-    console.log("인증 이메일 발송 완료.");
-    console.log("--- 회원가입 API 종료 ---\n");
-
 
     return NextResponse.json({ message: '회원가입 성공! 이메일을 확인하여 계정을 활성화해주세요.' }, { status: 201 });
   } catch (error) {
