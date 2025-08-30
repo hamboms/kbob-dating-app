@@ -14,7 +14,7 @@ export default function ChatRoom() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportMessage, setReportMessage] = useState('');
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-  const [sendError, setSendError] = useState(''); // 메시지 전송 오류 상태 추가
+  const [sendError, setSendError] = useState('');
 
   const params = useParams();
   const searchParams = useSearchParams();
@@ -61,7 +61,6 @@ export default function ChatRoom() {
       return;
     };
 
-    // 💥 수정: 'PUSher_KEY'의 오타를 'PUSHER_KEY'로 바로잡았습니다.
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
     });
@@ -90,7 +89,7 @@ export default function ChatRoom() {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (currentMessage.trim() === '' || !currentUser) return;
-    setSendError(''); // 이전 에러 메시지 초기화
+    setSendError('');
 
     try {
       const response = await fetch('/api/chat/message', {
@@ -103,14 +102,13 @@ export default function ChatRoom() {
         }),
       });
 
-      // 💥 추가: 전송 실패 시 사용자에게 알림
       if (!response.ok) {
         throw new Error("메시지 전송에 실패했습니다. 잠시 후 다시 시도해주세요.");
       }
       setCurrentMessage('');
     } catch (error) {
       console.error("Failed to send message", error);
-      setSendError(error.message); // 에러 메시지 상태 업데이트
+      setSendError(error.message);
     }
   };
 
@@ -192,7 +190,8 @@ export default function ChatRoom() {
               value={currentMessage}
               onChange={(e) => setCurrentMessage(e.target.value)}
               placeholder="메시지를 입력하세요..."
-              className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              // 💥 수정: 글자 색상을 검은색으로 지정하는 'text-black'을 추가했습니다.
+              className="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
             />
             <button type="submit" className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400" disabled={!currentMessage.trim()}>
               전송
